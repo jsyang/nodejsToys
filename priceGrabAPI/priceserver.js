@@ -1,89 +1,98 @@
 var http = require('http');
 
 // Get an RSS response from the host.
-function GetRSS(port,host,path,page)
+function GetRSS(port,host,path)
 {
-    http.get({host:host,port:80,path:path+page},function(res)
+    console.log(host+path+port.page);
+    http.get({host:host,port:80,path:path+port.page},function(res)
     {        
         port.dataDump="";
         res.on('data',function(chunk){ port.dataDump+=chunk; });
-        res.on('end',function(){ port.write(port.dataDump); port.end(); });
+        res.on('end',function()
+        {
+            var info=PageGetPrices(port.dataDump);
+
+            if(port.itemLastDate===info.itemLastDate)
+            {
+                // We got all the prices!
+                var sum=0;
+                var _N=1/port.prices.length;
+                for(var i in port.prices) sum+=port.prices[i];
+                var sampleMean=sum*_N;
+                
+                sum=0;
+                for(var i in port.prices) sum+=(port.prices[i]-sampleMean)*(port.prices[i]-sampleMean);
+                var sampleVariance=sum*_N;
+                
+                port.end("\nSample mean: "+sampleMean+"\nSample Std. Dev.:"+Math.sqrt(sampleVariance)+"\n");
+            }
+            else
+            {
+                // Keep fetching!
+                port.itemLastDate=info.itemLastDate;
+                console.log(port.itemLastDate);
+                port.prices=port.prices.concat(info.pricesOnPage);
+                
+                port.page++;
+                GetRSS(port,host,path);
+            }
+        });
     });
 }
 
 // Get prices from a Kijiji results page.
 function PageGetPrices(xml)
 {    
+    var pricesOnPage=[];
+    
     // fuck hardcore parsing libraries --- FOR NOW
     // we'll do it live!
-    xml=xml.slice();
+    while(1)
+    {
+        // Make sure our dollar signs are in the <title>
+        var i=xml.indexOf("<title>");
+        if(i==-1) break;
+        xml=xml.slice(i+7);
+        
+        // Find the dollar sign.
+        var i=xml.indexOf("$");
+        if(i==-1) break;
+        xml=xml.slice(i+1);
+        
+        var j=xml.indexOf("</");
+        pricesOnPage.push(parseFloat(xml.substring(0,j)));
+        xml=xml.slice(j+8);
+    }
     
+    var itemLastDate=xml.substring(xml.lastIndexOf("<dc:date>")+9,xml.lastIndexOf("</dc:date>"));
+    //console.log(pricesOnPage.length);
+    
+    return {
+        pricesOnPage:pricesOnPage,
+        itemLastDate:itemLastDate
+    };
 }
 
 // Get prices page from Kijiji.
-function PricesKijiji(item,region,sendBackPort)
+function PricesKijiji(item,region,port)
 {
     var host=region+".kijiji.ca";
     // 0 = all ads
     // 1 = wanted
     // 2 = offering
     
-    var path="/f-SearchAdRss?AdType="+2+"&CatId=0&Keyword="+item+"&Page=";
-    GetRSS(sendBackPort,host,path,1);
+    // Min Price of 1 so we don't get "Please Contact" garbage.
+    var path="/f-SearchAdRss?AdType="+2+"&CatId=0&Keyword="+item+"&minPrice=1&Page=";
+    
+    port.prices=[]; // Add a field in there for the collected data (thus far).
+    port.page=1;    // Start from page 1, end when the date for the first item matches that of the last page...
+    port.itemLastDate="";
+    
+    GetRSS(port,host,path);
+
 }
 
-function getKijijiPrices(kword,baseurl)
-{
-    var i=1;
-    var prices=[];
-    var progressWindow=IE(0,-20,180,140,true);
-    var progress=progressWindow.Document;    
-    progress.body.style.overflow="hidden";
-    progress.body.style.font="12px verdana";    
-    progress.body.style.verticalAlign="middle";
-    progress.body.innerHTML=kword+"<hr><b>Scraping page <span id='page'>0</span></b><br>Sample size: <span id='size'>0</span>";
-    var pageProgress=progress.getElementById("page");
-    var size=progress.getElementById("size");
-    
-    while(1){
-        pageProgress.innerHTML=""+i;
-        
-        // Can decrease sleeptime if we've turned off image loading in IE, goes MUCH faster.
-        (function(url){ie.Navigate(url);while(ie.Busy){}WScript.Sleep(1000);ie.Stop();}) (baseurl+i);
-
-        var d=ie.Document;
-
-        // Max page number that's not the current page.
-        var gPage=IEGetElementsByClassName("notCurrentPage");
-        gPage=gPage.length? parseInt(gPage[gPage.length-1].innerText) : 0;
-        
-        // Current page number.
-        var cPage=IEGetElementsByClassName("currentPage");
-        cPage=cPage.length? parseInt(cPage[0].innerText) : 1;
-
-        // Max 20 results per page.
-        for(var j=0; j<20; j++){            
-            var t=d.getElementById("resultRow"+j);
-            if(!t) break;
-            var title=t.children[2].children[0].innerText;
-            var price=t.children[3].innerText;
-            price=parseFloat(price.substr(1));
-            if(!isNaN(price)) prices.push(price);
-            pageProgress.innerHTML+=".";
-        }
-        
-        size.innerText=prices.length;
-        
-        // No more pages to look at, otherwise flip to next page
-        if(cPage>gPage) break; else i++;        
-    }
-    
-    progressWindow.Quit();
-    
-    return prices;
-}
-
-
+// Response writing.
 http.Server(function(req,res)
 {
     res.writeHead(200,
