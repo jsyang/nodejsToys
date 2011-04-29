@@ -1,4 +1,5 @@
 var http = require('http');
+var url  = require('url');
 
 // Get an RSS response from the host.
 function GetRSS(port,host,path)
@@ -23,6 +24,8 @@ function GetRSS(port,host,path)
                 sum=0;
                 for(var i in port.prices) sum+=(port.prices[i]-sampleMean)*(port.prices[i]-sampleMean);
                 var sampleVariance=sum*_N;
+                
+                console.log("Calculating using prices:"+port.prices+"\n\n");
                 
                 port.end("\nSample mean: "+sampleMean+"\nSample Std. Dev.:"+Math.sqrt(sampleVariance)+"\n");
             }
@@ -60,7 +63,8 @@ function PageGetPrices(xml)
         xml=xml.slice(i+1);
         
         var j=xml.indexOf("</");
-        pricesOnPage.push(parseFloat(xml.substring(0,j)));
+        var listingPrice=parseFloat(xml.substring(0,j));
+        if(!isNaN(listingPrice)) pricesOnPage.push(listingPrice);
         xml=xml.slice(j+8);
     }
     
@@ -101,7 +105,11 @@ http.Server(function(req,res)
         'Access-Control-Allow-Origin': '*'
     });
 
-    PricesKijiji("netbook","hamilton",res);
-    //res.end();
+    // Region first, then item name.
+    var info=url.parse(req.url).pathname.split("/");
+    var region=info[1];
+    var item=info[2];
+    
+    PricesKijiji(item,region,res);
     
 }).listen(8888);
