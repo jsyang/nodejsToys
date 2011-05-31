@@ -1,60 +1,45 @@
 var http = require('http');
 var url  = require('url');
+var comm = require('./commonalityNode.js');
 
-// Get an RSS response from the host.
-function GetRSS(port,host,path)
+// Curl.
+function curl(res_,host,path,callback)
 {
-    console.log(host+path+port.page);
-    http.get({host:host,port:80,path:path+port.page},function(res)
-    {        
-        port.dataDump="";
-        res.on('data',function(chunk){ port.dataDump+=chunk; });
-        res.on('end',function()
-        {
-            var info=PageGetPrices(port.dataDump);
-
-            if(port.itemLastDate===info.itemLastDate)
-            {
-                // We got all the prices!
-                var sum=0;
-                var _N=1/port.prices.length;
-                for(var i in port.prices) sum+=port.prices[i];
-                var sampleMean=sum*_N;
-                
-                sum=0;
-                for(var i in port.prices) sum+=(port.prices[i]-sampleMean)*(port.prices[i]-sampleMean);
-                var sampleVariance=sum*_N;
-                
-                console.log("Calculating using prices:"+port.prices+"\n\n");
-                
-                port.end("\nSample mean: "+sampleMean+"\nSample Std. Dev.:"+Math.sqrt(sampleVariance)+"\n");
-            }
-            else
-            {
-                // Keep fetching!
-                port.itemLastDate=info.itemLastDate;
-                console.log(port.itemLastDate);
-                port.prices=port.prices.concat(info.pricesOnPage);
-                
-                port.page++;
-                GetRSS(port,host,path);
-            }
-        });
+  res_.dataDump="";
+  http.get({host:host,port:80,path:path},function(res){    
+    res.on('data',function(chunk){res_.dataDump+=chunk;});
+    res.on('end', function(){
+      if(callback) res_.end(callback(res_.dataDump));      
     });
+  });
 }
 
-// Response writing.
+function stripHTMLgetTAGS(HTML){
+  var txtOnly=HTML.replace(/<\/?\w+((\s+\w+(\s*=\s*(?:"(.|\n)*?"|'(.|\n)*?'|[^'">\s]+))?)+\s*|\s*)\/?>/g,'');
+
+  var tags=new comm.Commonality();
+  tags.addbody(txtOnly);
+  var m=1; do {
+    tags.recomp(++m);
+  } while(tags.commonsSize>7);
+  
+  return tags.theme();
+}
+
+
 http.Server(function(req,res)
 {
-    res.writeHead(200,
-    {
-        'Content-Type':'text/plain',
-        'Access-Control-Allow-Origin': '*'
-    });
+  res.writeHead(200,{
+    'Content-Type':                 'text/plain',
+    'Access-Control-Allow-Origin':  '*'
+  });
 
-    // Region first, then item name.
-    var info=url.parse(req.url).pathname.split("/");
+  var queryURL=url.parse(req.url).pathname.substring(1).split("/");
+  var r={
+    host: queryURL.shift(),
+    path: "/"+queryURL.join("/")
+  };
+  
+  curl(res, r.host, r.path, stripHTMLgetTAGS);
 
-    PricesKijiji(item,region,res);
-    
 }).listen(8888);
