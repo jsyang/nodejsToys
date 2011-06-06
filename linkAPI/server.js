@@ -15,15 +15,21 @@ function curl(res_,host,path,callback)
 }
 
 function stripHTMLgetTAGS(HTML){
-  var txtOnly=HTML.replace(/<\/?\w+((\s+\w+(\s*=\s*(?:"(.|\n)*?"|'(.|\n)*?'|[^'">\s]+))?)+\s*|\s*)\/?>/g,'');
 
-  var tags=new comm.Commonality();
-  tags.addbody(txtOnly);
-  var m=1; do {
-    tags.recomp(++m);
-  } while(tags.commonsSize>7);
+  var innerText=HTML.replace(/((<[\s\/]*script\b[^>]*>)([^>]*)(<\/script>))/gi,''); // Delete Javascript code  
+  innerText=innerText.replace(/<script[\d\D]*?>[\d\D]*?<\/script>/gi,''); // Delete Javascript code  
+  innerText=innerText.replace(/(<!--.+?-->)/g,'');           // Delete comment tags
+  innerText=innerText.replace(/(<meta.+?>)/ig,'');           // Delete comment tags
+  innerText=innerText.replace(/(<!doctype.+?>)/ig,'');       // Delete DOCTYPE tag
+  innerText=innerText.replace(/<\/?\w+((\s+\w+(\s*=\s*(?:"(.|\n)*?"|'(.|\n)*?'|[^'">\s]+))?)+\s*|\s*)\/?>/g,'');
+  innerText=innerText.replace(/(&.+?;)/gs,'');               // Delete HTML entities  
+  console.log(innerText);
   
-  return tags.theme();
+  var digest=new comm.Commonality();
+  digest.addBody(innerText);    
+  for(var n=1; digest.recomp(++n)>20;);
+  
+  return digest.show("commonwords");
 }
 
 
