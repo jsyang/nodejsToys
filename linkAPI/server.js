@@ -14,10 +14,12 @@ function curl(res_,host,path,callback)
   });
 }
 
-function stripHTMLgetTAGS(HTML){
+function digestWebPage(HTML){
 
-  var innerText=HTML.replace(/((<[\s\/]*script\b[^>]*>)([^>]*)(<\/script>))/gi,''); // Delete Javascript code  
-  innerText=innerText.replace(/<script[\d\D]*?>[\d\D]*?<\/script>/gi,''); // Delete Javascript code  
+  // Delete Javascript code  
+  var innerText=HTML.replace(/((<[\s\/]*script\b[^>]*>)([^>]*)(<\/script>))/gi,'');
+  innerText=innerText.replace(/<script[\d\D]*?>[\d\D]*?<\/script>/gi,''); 
+  
   innerText=innerText.replace(/(<!--.+?-->)/g,'');           // Delete comment tags
   innerText=innerText.replace(/(<meta.+?>)/ig,'');           // Delete comment tags
   innerText=innerText.replace(/(<!doctype.+?>)/ig,'');       // Delete DOCTYPE tag
@@ -25,9 +27,8 @@ function stripHTMLgetTAGS(HTML){
   innerText=innerText.replace(/(&.+?;)/gs,'');               // Delete HTML entities  
   console.log(innerText);
   
-  var digest=new comm.Commonality();
-  digest.addBody(innerText);    
-  for(var n=1; digest.recomp(++n)>20;);
+  var digest=new comm.Commonality(innerText);
+  for(var n=1; digest.recomp(++n)>20;); // No more than 20 common words.
   
   return digest.show("commonwords");
 }
@@ -46,6 +47,6 @@ http.Server(function(req,res)
     path: "/"+queryURL.join("/")
   };
   
-  curl(res, r.host, r.path, stripHTMLgetTAGS);
+  curl(res, r.host, r.path, digestWebPage);
 
 }).listen(8888);
